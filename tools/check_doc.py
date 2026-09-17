@@ -157,6 +157,23 @@ def main():
     if found:
         report["notes"].append("禁词/句式命中（AI 腔或学生腔，建议改写）: " + "; ".join(found))
 
+    # 7. AI 统计特征(检测器视角: 突发度/分号密度/连接词/顿号长串) — 提示级
+    import statistics as _st
+    body_txt = text[: text.rfind("参考文献")] if "参考文献" in text else text
+    body_lines = [l for l in body_txt.split("\n") if l.strip() and not l.strip().startswith(("#", "[", "**摘要", "**关键词"))]
+    btxt = "\n".join(body_lines)
+    _sents = [s.strip() for s in re.split(r"[。！？]", btxt) if len(s.strip()) >= 4]
+    _lens = [len(re.findall(r"[\u4e00-\u9fff]", s)) for s in _sents]
+    if len(_lens) >= 10:
+        _mu, _sd = _st.mean(_lens), _st.pstdev(_lens)
+        _cv = _sd / _mu if _mu else 0
+        _short = sum(1 for x in _lens if x <= 8) * 100 // len(_lens)
+        _semi = btxt.count("；") * 1000 / max(1, len(re.findall(r"[\u4e00-\u9fff]", btxt)))
+        _quad = len(re.findall(r"[一-龥]{2,10}、[一-龥]{2,10}、[一-龥]{2,10}、[一-龥]{2,10}", btxt))
+        report["notes"].append(
+            f"AI统计特征: 句长CV={_cv:.2f}(人写≥0.55, AI≤0.40) | 短句占比{_short}%(人写≥10%) | "
+            f"分号{_semi:.1f}/千字(>4偏AI) | 顿号4联×{_quad}(修辞性排比需拆)")
+
     if args.json:
         print(json.dumps(report, ensure_ascii=False, indent=2))
     else:
